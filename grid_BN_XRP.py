@@ -11,13 +11,13 @@ import os
 import asyncio
 
 # ==================== 配置 ====================
-API_KEY = ""  # 替换为你的 API Key
-API_SECRET = ""  # 替换为你的 API Secret
+API_KEY = os.getenv("BINANCE_API_KEY")
+API_SECRET = os.getenv("BINANCE_API_SECRET")
 COIN_NAME = "XRP"  # 交易币种
-CONTRACT_TYPE = "USDC"  # 合约类型：USDT 或 USDC
+CONTRACT_TYPE = "USDT"  # 合约类型：USDT 或 USDC
 GRID_SPACING = 0.001  # 网格间距 (0.3%)
 INITIAL_QUANTITY = 3  # 初始交易数量 (币数量)
-LEVERAGE = 20  # 杠杆倍数
+LEVERAGE = 3  # 杠杆倍数
 WEBSOCKET_URL = "wss://fstream.binance.com/ws"  # WebSocket URL
 POSITION_THRESHOLD = 500  # 锁仓阈值
 POSITION_LIMIT = 100  # 持仓数量阈值
