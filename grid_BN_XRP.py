@@ -9,6 +9,7 @@ import ccxt
 import math
 import os
 import asyncio
+import uuid
 
 # ==================== 配置 ====================
 API_KEY = os.getenv("BINANCE_API_KEY")
@@ -567,7 +568,7 @@ class GridTradingBot:
             # 如果是市价单，不需要价格参数
             if order_type == 'market':
                 params = {
-                    'newClientOrderId': 'x-TBzTen1X',
+                    'newClientOrderId': self.generate_order_id('sell', 'LONG'),
                     'reduce_only': is_reduce_only,
                 }
                 if position_side is not None:
@@ -581,7 +582,7 @@ class GridTradingBot:
                     return None
 
                 params = {
-                    'newClientOrderId': 'x-TBzTen1X',
+                    'newClientOrderId': self.generate_order_id('buy', 'SHORT'),
                     'reduce_only': is_reduce_only,
                 }
                 if position_side is not None:
@@ -624,7 +625,7 @@ class GridTradingBot:
             if side == 'long':
                 # 卖出多头仓位止盈，应该使用 close_long 来平仓
                 params = {
-                    'newClientOrderId': 'x-TBzTen1X',
+                    'newClientOrderId': self.generate_order_id('sell', 'LONG'),
                     'reduce_only': True,
                     'positionSide': 'LONG'
                 }
@@ -633,7 +634,7 @@ class GridTradingBot:
             elif side == 'short':
                 # 买入空头仓位止盈，应该使用 close_short 来平仓
                 order = self.exchange.create_order(ccxt_symbol, 'limit', 'buy', quantity, price, {
-                    'newClientOrderId': 'x-TBzTen1X',
+                    'newClientOrderId': self.generate_order_id('buy', 'SHORT'),
                     'reduce_only': True,
                     'positionSide': 'SHORT'
                 })
@@ -729,6 +730,12 @@ class GridTradingBot:
             logger.error(f"启用双向持仓模式失败: {e}")
             raise e  # 抛出异常，停止程序
 
+    def generate_order_id(side, position_side):
+    """
+    基於 UUID 生成唯一訂單 ID
+    """
+    return f"order-{side.upper()}-{position_side.upper()}-{uuid.uuid4().hex[:24]}"
+    
     def check_and_reduce_positions(self):
         """检查持仓并减少库存风险"""
 
