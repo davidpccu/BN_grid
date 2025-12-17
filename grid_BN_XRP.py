@@ -731,10 +731,10 @@ class GridTradingBot:
             raise e  # 抛出异常，停止程序
 
     def generate_order_id(side, position_side):
-    """
-    基於 UUID 生成唯一訂單 ID
-    """
-    return f"order-{side.upper()}-{position_side.upper()}-{uuid.uuid4().hex[:24]}"
+        """
+        基於 UUID 生成唯一訂單 ID
+        """
+        return f"order-{side.upper()}-{position_side.upper()}-{uuid.uuid4().hex[:24]}"
     
     def check_and_reduce_positions(self):
         """检查持仓并减少库存风险"""
