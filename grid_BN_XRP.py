@@ -16,11 +16,11 @@ API_SECRET = os.getenv("BINANCE_API_SECRET")
 COIN_NAME = "XRP"  # 交易币种
 CONTRACT_TYPE = "USDC"  # 合约类型：USDT 或 USDC
 GRID_SPACING = 0.0015  # 网格间距 (0.3%)
-INITIAL_QUANTITY = 20  # 初始交易数量 (币数量)
+INITIAL_QUANTITY = 10  # 初始交易数量 (币数量)
 LEVERAGE = 5  # 杠杆倍数
 WEBSOCKET_URL = "wss://fstream.binance.com/ws"  # WebSocket URL
 POSITION_THRESHOLD = 500  # 锁仓阈值
-POSITION_LIMIT = 300  # 持仓数量阈值
+POSITION_LIMIT = 400  # 持仓数量阈值
 SYNC_TIME = 10  # 同步时间（秒）
 ORDER_FIRST_TIME = 10  # 首单间隔时间
 
