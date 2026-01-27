@@ -78,6 +78,7 @@ class GridTradingBot:
         self.last_position_update_time = 0  # 上次持仓更新时间
         self.last_orders_update_time = 0  # 上次订单更新时间
         self.last_ticker_update_time = 0  # ticker 时间限速
+        self.last_order_cycle_ts = 0  # 本轮下单处理时间戳
         self.latest_price = 0  # 最新价格
         self.best_bid_price = None  # 最佳买价
         self.best_ask_price = None  # 最佳卖价
@@ -500,11 +501,12 @@ class GridTradingBot:
         self.cancel_orders_for_side('long')
 
         # 挂出多头开仓单
-        self.place_order('buy', self.best_bid_price, self.initial_quantity, False, 'long')
+        order = self.place_order('buy', self.best_bid_price, self.initial_quantity, False, 'long')
         logger.info(f"挂出多头开仓单: 买入 @ {self.latest_price}")
 
         # 更新上次多头挂单时间
-        self.last_long_order_time = time.time()
+        if order:
+            self.last_long_order_time = time.time()
         logger.info("初始化多头挂单完成")
 
     async def initialize_short_orders(self):
@@ -518,11 +520,12 @@ class GridTradingBot:
         self.cancel_orders_for_side('short')
 
         # 挂出空头开仓单
-        self.place_order('sell', self.best_ask_price, self.initial_quantity, False, 'short')
+        order = self.place_order('sell', self.best_ask_price, self.initial_quantity, False, 'short')
         logger.info(f"挂出空头开仓单: 卖出 @ {self.latest_price}")
 
         # 更新上次空头挂单时间
-        self.last_short_order_time = time.time()
+        if order:
+            self.last_short_order_time = time.time()
         logger.info("初始化空头挂单完成")
 
     def cancel_orders_for_side(self, position_side):
@@ -645,6 +648,7 @@ class GridTradingBot:
                 }
                 order = self.exchange.create_order(ccxt_symbol, 'limit', 'sell', quantity, price, params)
                 logger.info(f"成功挂 long 止盈单: 卖出 {quantity} {ccxt_symbol} @ {price}")
+                return order
             elif side == 'short':
                 # 买入空头仓位止盈，应该使用 close_short 来平仓
                 order = self.exchange.create_order(ccxt_symbol, 'limit', 'buy', quantity, price, {
@@ -652,8 +656,10 @@ class GridTradingBot:
                     'positionSide': 'SHORT'
                 })
                 logger.info(f"成功挂 short 止盈单: 买入 {quantity} {ccxt_symbol} @ {price}")
+                return order
         except ccxt.BaseError as e:
             logger.error(f"挂止盈单失败: {e}")
+        return None
 
     async def place_long_orders(self, latest_price):
         """挂多头订单"""
@@ -666,15 +672,35 @@ class GridTradingBot:
                     print(f"持仓{self.long_position}超过极限阈值 {POSITION_THRESHOLD}，long装死")
                     if self.sell_long_orders <= 0:
                         r = float((self.long_position / self.short_position) / 100 + 1)
-                        self.place_take_profit_order(self.ccxt_symbol, 'long', self.latest_price * r,
-                                                     self.long_initial_quantity)  # 挂止盈
+                        take_profit_order = self.place_take_profit_order(
+                            self.ccxt_symbol,
+                            'long',
+                            self.latest_price * r,
+                            self.long_initial_quantity,
+                        )  # 挂止盈
+                        if take_profit_order:
+                            self.last_long_order_time = time.time()
                 else:
                     # 更新中间价
                     self.update_mid_price('long', latest_price)
                     self.cancel_orders_for_side('long')
-                    self.place_take_profit_order(self.ccxt_symbol, 'long', self.upper_price_long,
-                                                 self.long_initial_quantity)  # 挂止盈
-                    self.place_order('buy', self.lower_price_long, self.long_initial_quantity, False, 'long')  # 挂补仓
+                    take_profit_order = self.place_take_profit_order(
+                        self.ccxt_symbol,
+                        'long',
+                        self.upper_price_long,
+                        self.long_initial_quantity,
+                    )  # 挂止盈
+                    if take_profit_order:
+                        self.last_long_order_time = time.time()
+                    open_order = self.place_order(
+                        'buy',
+                        self.lower_price_long,
+                        self.long_initial_quantity,
+                        False,
+                        'long',
+                    )  # 挂补仓
+                    if open_order:
+                        self.last_long_order_time = time.time()
                     logger.info("挂多头止盈，挂多头补仓")
 
         except Exception as e:
@@ -691,16 +717,36 @@ class GridTradingBot:
                     if self.buy_short_orders <= 0:
                         r = float((self.short_position / self.long_position) / 100 + 1)
                         logger.info("发现多头止盈单缺失。。需要补止盈单")
-                        self.place_take_profit_order(self.ccxt_symbol, 'short', self.latest_price * r,
-                                                     self.short_initial_quantity)  # 挂止盈
+                        take_profit_order = self.place_take_profit_order(
+                            self.ccxt_symbol,
+                            'short',
+                            self.latest_price * r,
+                            self.short_initial_quantity,
+                        )  # 挂止盈
+                        if take_profit_order:
+                            self.last_short_order_time = time.time()
 
                 else:
                     # 更新中间价
                     self.update_mid_price('short', latest_price)
                     self.cancel_orders_for_side('short')
-                    self.place_take_profit_order(self.ccxt_symbol, 'short', self.lower_price_short,
-                                                 self.short_initial_quantity)  # 挂止盈
-                    self.place_order('sell', self.upper_price_short, self.short_initial_quantity, False, 'short')  # 挂补仓
+                    take_profit_order = self.place_take_profit_order(
+                        self.ccxt_symbol,
+                        'short',
+                        self.lower_price_short,
+                        self.short_initial_quantity,
+                    )  # 挂止盈
+                    if take_profit_order:
+                        self.last_short_order_time = time.time()
+                    open_order = self.place_order(
+                        'sell',
+                        self.upper_price_short,
+                        self.short_initial_quantity,
+                        False,
+                        'short',
+                    )  # 挂补仓
+                    if open_order:
+                        self.last_short_order_time = time.time()
                     logger.info("挂空头止盈，挂空头补仓")
 
         except Exception as e:
@@ -786,6 +832,11 @@ class GridTradingBot:
     async def adjust_grid_strategy(self):
 
         """根据最新价格和持仓调整网格策略"""
+        cycle_ts = self.last_ticker_update_time or time.time()
+        if cycle_ts == self.last_order_cycle_ts:
+            return
+        self.last_order_cycle_ts = cycle_ts
+
         # 检查双向仓位库存，如果同时达到，就统一部分平仓减少库存风险，提高保证金使用率
         self.check_and_reduce_positions()
         # print(self.latest_price, '多挂', self.buy_long_orders, '多平', self.buy_long_orders, '空挂', self.sell_short_orders, '空平', self.buy_short_orders)
