@@ -59,8 +59,8 @@ class GridTradingBot:
         self.grid_spacing = grid_spacing
         self.initial_quantity = initial_quantity
         self.leverage = leverage
-        self.exchange = self._initialize_exchange()  # 初始化交易所
         self.ccxt_symbol = f"{coin_name}/{contract_type}:{contract_type}"  # 动态生成交易对
+        self.exchange = self._initialize_exchange()  # 初始化交易所
 
         # 获取价格精度{self.price_precision}, 数量精度: {self.amount_precision}, 最小下单数量: {self.min_order_amount}
         self._get_price_precision()
@@ -106,6 +106,12 @@ class GridTradingBot:
         })
         # 加载市场数据
         exchange.load_markets(reload=False)
+        try:
+            exchange.set_leverage(LEVERAGE, self.ccxt_symbol)
+            logger.info(f"设置杠杆成功: {self.ccxt_symbol} {LEVERAGE}x")
+        except Exception:
+            logger.exception(f"设置杠杆失败: {self.ccxt_symbol} {LEVERAGE}x")
+            raise
         return exchange
 
     def _get_price_precision(self):
