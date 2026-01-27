@@ -367,6 +367,23 @@ class GridTradingBot:
                 logger.error(f"WebSocket 连接失败: {e}")
                 await asyncio.sleep(5)  # 等待 5 秒后重试
 
+    async def sync_after_reconnect(self):
+        """重连后同步持仓与挂单，并按需重建网格"""
+        self.long_position, self.short_position = self.get_position()
+        self.check_orders_status()
+        self.last_position_update_time = time.time()
+        self.last_orders_update_time = time.time()
+        logger.info(
+            f"重连后同步: 多头 {self.long_position} 张, 空头 {self.short_position} 张, "
+            f"多头开仓={self.buy_long_orders}, 多头止盈={self.sell_long_orders}, "
+            f"空头开仓={self.sell_short_orders}, 空头止盈={self.buy_short_orders}"
+        )
+
+        if self.latest_price:
+            await self.adjust_grid_strategy()
+        else:
+            logger.info("重连后暂无最新价格，等待行情更新再重建网格")
+
     async def connect_public_websocket(self):
         """连接 WebSocket 并订阅 ticker 和持仓数据"""
         async with websockets.connect(WEBSOCKET_URL) as ws:
@@ -398,6 +415,7 @@ class GridTradingBot:
                     {"channel": "orders", "instType": "SWAP", "instId": f"{self.coin_name}-{self.contract_type}-SWAP"}
                 ]
             }))
+            await self.sync_after_reconnect()
 
             while True:
                 msg = await ws.recv()
