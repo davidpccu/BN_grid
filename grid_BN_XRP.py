@@ -671,7 +671,10 @@ class GridTradingBot:
                 if self.long_position > POSITION_THRESHOLD:
                     print(f"持仓{self.long_position}超过极限阈值 {POSITION_THRESHOLD}，long装死")
                     if self.sell_long_orders <= 0:
-                        r = float((self.long_position / self.short_position) / 100 + 1)
+                        if self.short_position == 0:
+                            r = 1 + GRID_SPACING
+                        else:
+                            r = float((self.long_position / self.short_position) / 100 + 1)
                         take_profit_order = self.place_take_profit_order(
                             self.ccxt_symbol,
                             'long',
@@ -715,7 +718,10 @@ class GridTradingBot:
                 if self.short_position > POSITION_THRESHOLD:
                     print(f"持仓{self.short_position}超过极限阈值 {POSITION_THRESHOLD}，short 装死")
                     if self.buy_short_orders <= 0:
-                        r = float((self.short_position / self.long_position) / 100 + 1)
+                        if self.long_position == 0:
+                            r = 1 + GRID_SPACING
+                        else:
+                            r = float((self.short_position / self.long_position) / 100 + 1)
                         logger.info("发现多头止盈单缺失。。需要补止盈单")
                         take_profit_order = self.place_take_profit_order(
                             self.ccxt_symbol,
