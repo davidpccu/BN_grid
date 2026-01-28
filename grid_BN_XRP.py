@@ -23,6 +23,7 @@ POSITION_THRESHOLD = 350  # 锁仓阈值
 POSITION_LIMIT = 300  # 持仓数量阈值
 SYNC_TIME = 10  # 同步时间（秒）
 ORDER_FIRST_TIME = 10  # 首单间隔时间
+STARTUP_GRACE_PERIOD = 90  # 启动宽限期（秒），期间只同步不下单
 
 # ==================== 日志配置 ====================
 # 获取当前脚本的文件名（不带扩展名）
@@ -90,6 +91,8 @@ class GridTradingBot:
         self.lower_price_short = 0  # short 网格上
         self.upper_price_short = 0  # short 网格下
         self.listenKey = self.get_listen_key()  # 获取初始 listenKey
+        self.startup_time = None  # 启动时间戳（用于启动宽限期）
+        self.last_grace_log_time = 0  # 启动宽限期日志限速
 
         # 检查持仓模式，如果不是双向持仓模式则停止程序
         self.check_and_enable_hedge_mode()
@@ -146,6 +149,11 @@ class GridTradingBot:
 
         logger.info(
             f"价格精度: {self.price_precision}, 数量精度: {self.amount_precision}, 最小下单数量: {self.min_order_amount}")
+
+    def _in_startup_grace_period(self):
+        if self.startup_time is None:
+            return False
+        return time.time() - self.startup_time < STARTUP_GRACE_PERIOD
 
     def get_position(self):
         """获取当前持仓"""
@@ -247,6 +255,7 @@ class GridTradingBot:
 
     async def run(self):
         """启动 WebSocket 监听"""
+        self.startup_time = time.time()
         # 初始化时获取一次持仓数据
         self.long_position, self.short_position = self.get_position()
         # self.last_position_update_time = time.time()
@@ -283,6 +292,10 @@ class GridTradingBot:
             f"多头开仓={self.buy_long_orders}, 多头止盈={self.sell_long_orders}, "
             f"空头开仓={self.sell_short_orders}, 空头止盈={self.buy_short_orders}"
         )
+
+        if self._in_startup_grace_period():
+            logger.info("启动宽限期内，跳过重连后的网格调整")
+            return
 
         if self.latest_price:
             await self.adjust_grid_strategy()
@@ -400,6 +413,13 @@ class GridTradingBot:
                 self.check_orders_status()
                 self.last_orders_update_time = time.time()
                 logger.info(f"同步 orders: 多头买单 {self.buy_long_orders} 张, 多头卖单 {self.sell_long_orders} 张,空头卖单 {self.sell_short_orders} 张, 空头买单 {self.buy_short_orders} 张 @ ticker")
+
+            if self._in_startup_grace_period():
+                if time.time() - self.last_grace_log_time > 10:
+                    remaining = STARTUP_GRACE_PERIOD - (time.time() - self.startup_time)
+                    logger.info(f"启动宽限期内，剩余 {max(0, int(remaining))} 秒，暂停网格下单")
+                    self.last_grace_log_time = time.time()
+                return
 
             await self.adjust_grid_strategy()
 
