@@ -8,6 +8,7 @@ import time
 import ccxt
 import math
 import os
+import socket
 import asyncio
 
 # ==================== 配置 ====================
@@ -95,6 +96,8 @@ class GridTradingBot:
         self.listenKey = self.get_listen_key()  # 获取初始 listenKey
         self.startup_time = None  # 启动时间戳（用于启动宽限期）
         self.last_grace_log_time = 0  # 启动宽限期日志限速
+        self.client_order_prefix = self._build_client_order_prefix()
+        self.client_order_counter = 0
 
         # 检查持仓模式，如果不是双向持仓模式则停止程序
         self.check_and_enable_hedge_mode()
@@ -157,6 +160,25 @@ class GridTradingBot:
             return False
         return time.time() - self.startup_time < STARTUP_GRACE_PERIOD
 
+    def _build_client_order_prefix(self):
+        base_id = os.getenv("BOT_INSTANCE_ID")
+        if not base_id:
+            base_id = f"{socket.gethostname()}-{int(time.time())}"
+        short_hash = hashlib.sha256(base_id.encode("utf-8")).hexdigest()[:8]
+        return f"grid-{short_hash}-"
+
+    def _next_client_order_id(self, label):
+        self.client_order_counter += 1
+        return f"{self.client_order_prefix}{label}-{self.client_order_counter}"
+
+    def _is_own_order(self, order):
+        client_order_id = order.get("clientOrderId") or order.get("info", {}).get("clientOrderId")
+        return bool(client_order_id and client_order_id.startswith(self.client_order_prefix))
+
+    def _get_own_open_orders(self):
+        orders = self.exchange.fetch_open_orders(self.ccxt_symbol)
+        return [order for order in orders if self._is_own_order(order)]
+
     def get_position(self):
         """获取当前持仓"""
         params = {
@@ -209,10 +231,10 @@ class GridTradingBot:
             try:
                 await asyncio.sleep(60)  # 每60秒检查一次
                 current_time = time.time()  # 当前时间（秒）
-                orders = self.exchange.fetch_open_orders(self.ccxt_symbol)
+                orders = self._get_own_open_orders()
 
                 if not orders:
-                    logger.info("当前没有未成交的挂单")
+                    logger.info("当前没有本实例未成交的挂单")
                     self.buy_long_orders = 0.0  # 多头买入剩余挂单数量
                     self.sell_long_orders = 0.0  # 多头卖出剩余挂单数量
                     self.sell_short_orders = 0.0  # 空头卖出剩余挂单数量
@@ -244,7 +266,7 @@ class GridTradingBot:
     def check_orders_status(self):
         """检查当前所有挂单的状态，并更新多头和空头的挂单数量"""
         # 获取当前所有挂单（带 symbol 参数，限制为某个交易对）
-        orders = self.exchange.fetch_open_orders(symbol=self.ccxt_symbol)
+        orders = self._get_own_open_orders()
 
         # 初始化计数器
         buy_long_orders = 0.0  # 使用浮点数
@@ -577,7 +599,7 @@ class GridTradingBot:
 
     def cancel_orders_for_side(self, position_side):
         """撤销某个方向的所有挂单"""
-        orders = self.exchange.fetch_open_orders(self.ccxt_symbol)
+        orders = self._get_own_open_orders()
 
         if len(orders) == 0:
             logger.info("没有找到挂单")
@@ -636,6 +658,7 @@ class GridTradingBot:
             if order_type == 'market':
                 params = {
                     'reduce_only': is_reduce_only,
+                    'newClientOrderId': self._next_client_order_id(f"{side}-mkt"),
                 }
                 if position_side is not None:
                     params['positionSide'] = position_side.upper()  # Binance 要求大写：LONG 或 SHORT
@@ -649,6 +672,7 @@ class GridTradingBot:
 
                 params = {
                     'reduce_only': is_reduce_only,
+                    'newClientOrderId': self._next_client_order_id(f"{side}-lmt"),
                 }
                 if position_side is not None:
                     params['positionSide'] = position_side.upper()  # Binance 要求大写：LONG 或 SHORT
@@ -662,7 +686,7 @@ class GridTradingBot:
     def place_take_profit_order(self, ccxt_symbol, side, price, quantity):
         # print('止盈单价格', price)
         # 检查是否已有相同价格的挂单
-        orders = self.exchange.fetch_open_orders(ccxt_symbol)
+        orders = self._get_own_open_orders()
         for order in orders:
             if (
                     order['info'].get('positionSide') == side.upper()
@@ -691,7 +715,8 @@ class GridTradingBot:
                 # 卖出多头仓位止盈，应该使用 close_long 来平仓
                 params = {
                     'reduce_only': True,
-                    'positionSide': 'LONG'
+                    'positionSide': 'LONG',
+                    'newClientOrderId': self._next_client_order_id("tp-long"),
                 }
                 order = self.exchange.create_order(ccxt_symbol, 'limit', 'sell', quantity, price, params)
                 logger.info(f"成功挂 long 止盈单: 卖出 {quantity} {ccxt_symbol} @ {price}")
@@ -700,7 +725,8 @@ class GridTradingBot:
                 # 买入空头仓位止盈，应该使用 close_short 来平仓
                 order = self.exchange.create_order(ccxt_symbol, 'limit', 'buy', quantity, price, {
                     'reduce_only': True,
-                    'positionSide': 'SHORT'
+                    'positionSide': 'SHORT',
+                    'newClientOrderId': self._next_client_order_id("tp-short"),
                 })
                 logger.info(f"成功挂 short 止盈单: 买入 {quantity} {ccxt_symbol} @ {price}")
                 return order
