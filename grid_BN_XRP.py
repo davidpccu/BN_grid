@@ -90,6 +90,8 @@ class GridTradingBot:
         self.mid_price_short = 0  # short 中间价
         self.lower_price_short = 0  # short 网格上
         self.upper_price_short = 0  # short 网格下
+        self.long_entry_price = None  # 多头平均成本
+        self.short_entry_price = None  # 空头平均成本
         self.listenKey = self.get_listen_key()  # 获取初始 listenKey
         self.startup_time = None  # 启动时间戳（用于启动宽限期）
         self.last_grace_log_time = 0  # 启动宽限期日志限速
@@ -164,17 +166,36 @@ class GridTradingBot:
         # print(positions)
         long_position = 0
         short_position = 0
+        self.long_entry_price = None
+        self.short_entry_price = None
 
         for position in positions:
             if position['symbol'] == self.ccxt_symbol:  # 使用动态的 symbol 变量
                 contracts = position.get('contracts', 0)  # 获取合约数量
                 side = position.get('side', None)  # 获取仓位方向
+                entry_price = position.get('entryPrice')
+                if entry_price is None:
+                    entry_price = position.get('info', {}).get('entryPrice')
+                if entry_price is not None:
+                    try:
+                        entry_price = float(entry_price)
+                    except (TypeError, ValueError):
+                        entry_price = None
 
                 # 判断是否为多头或空头
                 if side == 'long':  # 多头
                     long_position = contracts
+                    if entry_price:
+                        self.long_entry_price = entry_price
                 elif side == 'short':  # 空头
                     short_position = abs(contracts)  # 使用绝对值来计算空头合约数
+                    if entry_price:
+                        self.short_entry_price = entry_price
+
+        if long_position > 0 and self.long_entry_price:
+            self.update_mid_price('long', self.long_entry_price)
+        if short_position > 0 and self.short_entry_price:
+            self.update_mid_price('short', self.short_entry_price)
 
         # 如果没有持仓，返回 0
         if long_position == 0 and short_position == 0:
@@ -711,7 +732,8 @@ class GridTradingBot:
                             self.last_long_order_time = time.time()
                 else:
                     # 更新中间价
-                    self.update_mid_price('long', latest_price)
+                    mid_price = self.long_entry_price or latest_price
+                    self.update_mid_price('long', mid_price)
                     self.cancel_orders_for_side('long')
                     take_profit_order = self.place_take_profit_order(
                         self.ccxt_symbol,
@@ -760,7 +782,8 @@ class GridTradingBot:
 
                 else:
                     # 更新中间价
-                    self.update_mid_price('short', latest_price)
+                    mid_price = self.short_entry_price or latest_price
+                    self.update_mid_price('short', mid_price)
                     self.cancel_orders_for_side('short')
                     take_profit_order = self.place_take_profit_order(
                         self.ccxt_symbol,
