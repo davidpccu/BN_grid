@@ -637,6 +637,16 @@ class GridTradingBot:
         except ccxt.BaseError as e:
             logger.error(f"撤單失敗: {e}")
 
+    def _build_order_params(self, is_reduce_only, position_side, order_label):
+        params = {
+            'newClientOrderId': self._next_client_order_id(order_label),
+        }
+        if position_side is not None:
+            params['positionSide'] = position_side.upper()  # Binance 需要大寫：LONG 或 SHORT
+        if is_reduce_only and self.contract_type == 'USDT':
+            params['reduceOnly'] = True
+        return params
+
     def place_order(self, side, price, quantity, is_reduce_only=False, position_side=None, order_type='limit'):
         """掛單函式，支援雙向持倉"""
         try:
@@ -649,13 +659,7 @@ class GridTradingBot:
 
             # 市價單不需要價格參數
             if order_type == 'market':
-                params = {
-                    'newClientOrderId': self._next_client_order_id(f"{side}-mkt"),
-                }
-                if is_reduce_only:
-                    params['reduceOnly'] = True
-                if position_side is not None:
-                    params['positionSide'] = position_side.upper()  # Binance 需要大寫：LONG 或 SHORT
+                params = self._build_order_params(is_reduce_only, position_side, f"{side}-mkt")
                 order = self.exchange.create_order(self.ccxt_symbol, 'market', side, quantity, None, params)
                 return order
             else:
@@ -664,13 +668,7 @@ class GridTradingBot:
                     logger.error("限價單必須提供 price 參數")
                     return None
 
-                params = {
-                    'newClientOrderId': self._next_client_order_id(f"{side}-lmt"),
-                }
-                if is_reduce_only:
-                    params['reduceOnly'] = True
-                if position_side is not None:
-                    params['positionSide'] = position_side.upper()  # Binance 需要大寫：LONG 或 SHORT
+                params = self._build_order_params(is_reduce_only, position_side, f"{side}-lmt")
                 order = self.exchange.create_order(self.ccxt_symbol, 'limit', side, quantity, price, params)
                 return order
 
@@ -708,21 +706,14 @@ class GridTradingBot:
 
             if side == 'long':
                 # 賣出多頭持倉止盈
-                params = {
-                    'reduceOnly': True,
-                    'positionSide': 'LONG',
-                    'newClientOrderId': self._next_client_order_id("tp-long"),
-                }
+                params = self._build_order_params(True, 'LONG', "tp-long")
                 order = self.exchange.create_order(ccxt_symbol, 'limit', 'sell', quantity, price, params)
                 logger.info(f"成功掛 long 止盈單: 賣出 {quantity} {ccxt_symbol} @ {price}")
                 return order
             elif side == 'short':
                 # 買入空頭持倉止盈
-                order = self.exchange.create_order(ccxt_symbol, 'limit', 'buy', quantity, price, {
-                    'reduceOnly': True,
-                    'positionSide': 'SHORT',
-                    'newClientOrderId': self._next_client_order_id("tp-short"),
-                })
+                params = self._build_order_params(True, 'SHORT', "tp-short")
+                order = self.exchange.create_order(ccxt_symbol, 'limit', 'buy', quantity, price, params)
                 logger.info(f"成功掛 short 止盈單: 買入 {quantity} {ccxt_symbol} @ {price}")
                 return order
         except ccxt.BaseError as e:
