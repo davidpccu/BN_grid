@@ -650,12 +650,12 @@ class GridTradingBot:
             # 市價單不需要價格參數
             if order_type == 'market':
                 params = {
-                    'reduce_only': is_reduce_only,
+                    'reduceOnly': is_reduce_only,
                     'newClientOrderId': self._next_client_order_id(f"{side}-mkt"),
                 }
                 if position_side is not None:
                     params['positionSide'] = position_side.upper()  # Binance 需要大寫：LONG 或 SHORT
-                order = self.exchange.create_order(self.ccxt_symbol, 'market', side, quantity, params=params)
+                order = self.exchange.create_order(self.ccxt_symbol, 'market', side, quantity, None, params)
                 return order
             else:
                 # 檢查 price 是否為 None
@@ -664,7 +664,7 @@ class GridTradingBot:
                     return None
 
                 params = {
-                    'reduce_only': is_reduce_only,
+                    'reduceOnly': is_reduce_only,
                     'newClientOrderId': self._next_client_order_id(f"{side}-lmt"),
                 }
                 if position_side is not None:
@@ -707,7 +707,7 @@ class GridTradingBot:
             if side == 'long':
                 # 賣出多頭持倉止盈
                 params = {
-                    'reduce_only': True,
+                    'reduceOnly': True,
                     'positionSide': 'LONG',
                     'newClientOrderId': self._next_client_order_id("tp-long"),
                 }
@@ -717,7 +717,7 @@ class GridTradingBot:
             elif side == 'short':
                 # 買入空頭持倉止盈
                 order = self.exchange.create_order(ccxt_symbol, 'limit', 'buy', quantity, price, {
-                    'reduce_only': True,
+                    'reduceOnly': True,
                     'positionSide': 'SHORT',
                     'newClientOrderId': self._next_client_order_id("tp-short"),
                 })
