@@ -24,7 +24,7 @@ POSITION_THRESHOLD = 350  # 鎖倉閾值
 POSITION_LIMIT = 300  # 持倉數量閾值
 SYNC_TIME = 10  # 同步時間（秒）
 ORDER_FIRST_TIME = 10  # 首單間隔時間（秒）
-STARTUP_GRACE_PERIOD = 90  # 啟動寬限期（秒），期間只同步不下單
+STARTUP_GRACE_PERIOD = 40  # 啟動寬限期（秒），期間只同步不下單
 
 # ==================== 日誌配置 ====================
 # 取得目前腳本檔名（不含副檔名）
