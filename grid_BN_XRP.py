@@ -650,9 +650,10 @@ class GridTradingBot:
             # 市價單不需要價格參數
             if order_type == 'market':
                 params = {
-                    'reduceOnly': is_reduce_only,
                     'newClientOrderId': self._next_client_order_id(f"{side}-mkt"),
                 }
+                if is_reduce_only:
+                    params['reduceOnly'] = True
                 if position_side is not None:
                     params['positionSide'] = position_side.upper()  # Binance 需要大寫：LONG 或 SHORT
                 order = self.exchange.create_order(self.ccxt_symbol, 'market', side, quantity, None, params)
@@ -664,9 +665,10 @@ class GridTradingBot:
                     return None
 
                 params = {
-                    'reduceOnly': is_reduce_only,
                     'newClientOrderId': self._next_client_order_id(f"{side}-lmt"),
                 }
+                if is_reduce_only:
+                    params['reduceOnly'] = True
                 if position_side is not None:
                     params['positionSide'] = position_side.upper()  # Binance 需要大寫：LONG 或 SHORT
                 order = self.exchange.create_order(self.ccxt_symbol, 'limit', side, quantity, price, params)
